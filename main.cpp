@@ -35,8 +35,9 @@ public:
             std::cout<<"Something went terribly wrong"<<std::endl;
         }
         cv::namedWindow("Main", cv::WINDOW_AUTOSIZE);
-        cv::namedWindow("Tertiary", cv::WINDOW_AUTOSIZE);
-        cv::namedWindow("PerspectiveView", cv::WINDOW_AUTOSIZE);
+        // cv::namedWindow("Tertiary", cv::WINDOW_AUTOSIZE);
+        cv::namedWindow("PerspectiveView", cv::WINDOW_FULLSCREEN);
+        cv::namedWindow("PerspectiveTransformation", cv::WINDOW_AUTOSIZE);
         cv::namedWindow("Histogram", cv::WINDOW_AUTOSIZE);
 
         tf = this->initialize_transform_points();
@@ -57,17 +58,19 @@ public:
             buffer = PipeLine::equalize_multi_channel(buffer);
             buffer = perspectiveTransformer.get_perspective_markers(buffer);
             auto perspective_image = perspectiveTransformer.get_transformation_frame(buffer);
-            cv::cvtColor(processed, gray_scale, cv::COLOR_BGR2GRAY);
+            auto transformed_image = image_preprocessor(perspective_image);
+            // cv::cvtColor(processed, gray_scale, cv::COLOR_BGR2GRAY);
 //            cv::threshold(gray_scale, gray_scale, 200, 250, cv::THRESH_BINARY);
-            cv::adaptiveThreshold(gray_scale, gray_scale,255, cv::ADAPTIVE_THRESH_MEAN_C,cv::THRESH_BINARY,11, 10);
+            // cv::adaptiveThreshold(gray_scale, gray_scale,255, cv::ADAPTIVE_THRESH_MEAN_C,cv::THRESH_BINARY,11, 10);
 //            auto size = cv::Size (1, 2);
-            cv::medianBlur(gray_scale, gray_scale, 1);
+            // cv::medianBlur(gray_scale, gray_scale, 1);
 
-            auto gray_scale_feature_detection = extractor.detect_and_draw(gray_scale);
+            // auto gray_scale_feature_detection = extractor.detect_and_draw(gray_scale);
             cv::imshow("Main",buffer);
-            cv::imshow("Tertiary",gray_scale_feature_detection);
+            // cv::imshow("Tertiary",gray_scale_feature_detection);
             cv::imshow("Histogram", hist_img_);
             cv::imshow("PerspectiveView", perspective_image);
+            cv::imshow("PerspectiveTransformation", transformed_image);
             if (cv::waitKey(10) == 27){
                 break;
             }
@@ -84,8 +87,8 @@ private:
         PerspectiveTranformer ::transformation_points transform_points{
                 .top_left=cv::Point2f ((window_rect.width/2) - 200, (window_rect.height/2) + 200),
                 .bottom_left=cv::Point2f (window_rect.width/2 - 550, window_rect.height),
-                .top_right=cv::Point2f ((window_rect.width/2) + 100, (window_rect.height/2) +200),
-                .bottom_right=cv::Point2f (window_rect.width/2 + 370, window_rect.height)
+                .top_right=cv::Point2f ((window_rect.width/2) + 120, (window_rect.height/2) +200),
+                .bottom_right=cv::Point2f (window_rect.width/2 + 400, window_rect.height)
         };
         return transform_points;
     }
@@ -101,6 +104,7 @@ private:
     FeatureExtraction::SurfFeatureExtractor extractor{};
     FeatureExtraction::PerspectiveTransformer::transformation_points tf;
     FeatureExtraction::PerspectiveTransformer perspectiveTransformer {};
+    FeatureExtraction::ImagePreprocessor image_preprocessor {};
 };
 
 template<typename  T>

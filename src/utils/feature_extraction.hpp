@@ -33,11 +33,23 @@ namespace FeatureExtraction{
 
     class ImagePreprocessor {
     public:
+        enum class ExposureCorrectnessStrat: std::uint8_t {
+            PIX_VAL_NORMAL, PIX_VAL_EXP_CORRECT
+        };
+        struct SharpenImageParams {
+            double sigma;
+            int threshold_value ;
+            int amount ;
+        };
+        struct WhiteBalanceParams {
+            double ratio_s;
+            double ratio_l;
+        };
         struct ImageProcessorParams {
             double exposure_correctness_ratio = 1;
-            struct WhiteBalanceParams {
-
-            };
+            ExposureCorrectnessStrat exposure_correctness_strat = ExposureCorrectnessStrat::PIX_VAL_NORMAL;
+            SharpenImageParams sharpen_params {.sigma = 1, .threshold_value = 5, .amount = 1};
+            WhiteBalanceParams white_balance_params = {.ratio_s = 1, .ratio_l = 1};
             struct HighlightRemoverParams {
 
             };
@@ -46,45 +58,107 @@ namespace FeatureExtraction{
             };
         };
         explicit ImagePreprocessor() = default;
-        explicit ImagePreprocessor(ImageProcessorParams params) :
-        exposure_correctness_ratio(params.exposure_correctness_ratio) {
+        explicit ImagePreprocessor(const ImageProcessorParams &params) :
+        exposure_correctness_ratio(params.exposure_correctness_ratio),
+        ration_s(params.white_balance_params.ratio_s),
+        ration_l(params.white_balance_params.ratio_l),
+        sigma(params.sharpen_params.amount),
+        threshold_value(params.sharpen_params.threshold_value),
+        amount(params.sharpen_params.amount){
         };
         ~ImagePreprocessor() = default;
 
         auto operator()(cv::Mat& source) -> cv::Mat {
-            source = exposure_balance(source);
-            return source;
+            cv::Mat local_matrix ;;
+            cv::cvtColor(source, local_matrix, cv::COLOR_RGB2HLS);
+            local_matrix = shadow_remover(local_matrix);
+            local_matrix = exposure_balance(local_matrix);
+            local_matrix = white_balance(local_matrix);
+            return local_matrix;
         };
 
     private:
-        auto exposure_balance(const cv::Mat& image) -> cv::Mat {
+        auto sharpen_image(cv::Mat& hls_frame) const -> cv::Mat {
+            cv::Mat blurred;
+            cv::GaussianBlur(hls_frame, blurred, cv::Size(blurred.cols, blurred.rows), sigma, amount);
+            cv::Mat low_contrast_matrix = cv::abs(hls_frame -  blurred) < threshold_value;
+            cv::Mat sharpened_image = hls_frame * (1 + amount) - blurred * (-amount);
+            hls_frame.copyTo(sharpened_image, low_contrast_matrix);
+            return sharpened_image;
+        }
+        auto exposure_balance(cv::Mat& hls_frame) -> cv::Mat {
             double minVal, maxVal;
-            double mean_pixel_value;
-            cv::minMaxLoc(image, &minVal, &maxVal);
-            cv::mean(image, mean_pixel_value);
-            auto pix_val_tranformation =  [&](auto pix_value) {
-                pix_value = (pix_value - minVal) / (maxVal - minVal) * (pix_value - mean_pixel_value) * exposure_correctness_ratio;
-                return pix_value;
+            std::vector<cv::Mat> channels;
+            cv::split(hls_frame, channels);
+            auto l_channel = channels[1];
+            cv::Scalar mean_pixel_value { cv::mean(l_channel) };;
+            cv::minMaxLoc(l_channel, &minVal, &maxVal);
+
+            // normalization strategies
+            auto pix_val_exposure_correct =  [&](auto pix_value) {
+                auto result = (pix_value - minVal) / ((maxVal - minVal) * (pix_value - mean_pixel_value.val[0]) * exposure_correctness_ratio);
+                return result;
             };
-            std::transform(image.begin<double>(), image.end<double>(),
-                image.begin<double>(), pix_val_tranformation);
-            return image;
+
+            auto pix_val_normal_mean = [&](auto pix_value) {
+                return (pix_value - minVal) / (maxVal - minVal) * 255.0;
+            };
+
+
+            switch (exposure_correctness_strat_) {
+                case ExposureCorrectnessStrat::PIX_VAL_NORMAL:
+                    std::transform(l_channel.begin<double>(), l_channel.end<double>(),
+                l_channel.begin<double>(), pix_val_normal_mean);
+                    break;
+                case ExposureCorrectnessStrat::PIX_VAL_EXP_CORRECT:
+                    std::transform(l_channel.begin<double>(), l_channel.end<double>(),l_channel.begin<double>(), pix_val_exposure_correct);
+                    break;
+            }
+
+            return hls_frame;
 
         };
-        auto white_balance(cv::Mat& image) -> cv::Mat {
-            return image;
+        auto white_balance(cv::Mat& hls_frame) const -> cv::Mat {
+            std::vector<cv::Mat> channels {};
+            cv::split(hls_frame, channels);
+            cv::Mat s_channel = channels[1];
+            cv::Mat l_channel_negative = 255.0 - channels[2];
+            cv::Mat frame_s_ln = (ration_s * s_channel) + (ration_l * l_channel_negative);
+            double min_frame_s_ln, max_frame_s_ln;
+            double temp_frame_min, temp_frame_max;
+            cv::minMaxLoc(frame_s_ln, &min_frame_s_ln, &max_frame_s_ln);
+
+            cv::Mat mask_min_s_ln = frame_s_ln == min_frame_s_ln;
+            cv::Mat temp_frame_l_negative_buffer;
+            l_channel_negative.copyTo(temp_frame_l_negative_buffer, mask_min_s_ln);
+            cv::minMaxLoc(temp_frame_l_negative_buffer, &temp_frame_min, &temp_frame_max);
+            cv::Mat mask_max_s_ln = l_channel_negative > temp_frame_min;
+            cv::Mat min_s;
+            s_channel.copyTo(min_s, mask_min_s_ln & mask_max_s_ln);
+            s_channel = s_channel - min_s;
+            cv::Mat less_than_zero_mask = s_channel < 0;
+            s_channel.setTo(0, less_than_zero_mask);
+            cv::Mat result ;
+            cv::merge(channels, result);
+            return result ;
         };
-        auto highlight_remover(cv::Mat& image) -> cv::Mat {
-            return image;
+        auto highlight_remover(cv::Mat& hls_frame) -> cv::Mat {
+            return hls_frame;
         };
-        auto shadow_remover(cv::Mat& image) -> cv::Mat {
-            return image;
+        auto shadow_remover(cv::Mat& hls_frame) -> cv::Mat {
+            return hls_frame;
         };
     private:
         double exposure_correctness_ratio = 1.0;
+        ExposureCorrectnessStrat exposure_correctness_strat_ = ExposureCorrectnessStrat::PIX_VAL_NORMAL;
+        double ration_s = 0.1;
+        double ration_l = 0.9;
+        double sigma = 1;
+        int threshold_value = 5;
+        int amount = 1;
     };
 
-    class PerspectiveTransformer{
+    class PerspectiveTransformer{ // Should Notify the two pipelines gradient filter and canny gaussian
     public:
         struct transformation_points{
             cv::Point2f top_left;
