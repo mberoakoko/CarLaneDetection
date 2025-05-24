@@ -53,9 +53,9 @@ public:
         while (true){
             cap_.read(buffer);
             buffer.copyTo(processed);
-            histogram_.generate(buffer).copyTo(hist_img_);
+            histogram_.generate_histogram(buffer, {Utils::ImageType::YUV}).copyTo(hist_img_);
 
-            buffer = PipeLine::equalize_multi_channel(buffer);
+            // buffer = PipeLine::equalize_multi_channel(buffer);
             buffer = perspectiveTransformer.get_perspective_markers(buffer);
             auto perspective_image = perspectiveTransformer.get_transformation_frame(buffer);
             auto transformed_image = image_preprocessor(perspective_image);
@@ -65,7 +65,8 @@ public:
 //            auto size = cv::Size (1, 2);
             // cv::medianBlur(gray_scale, gray_scale, 1);
 
-            // auto gray_scale_feature_detection = extractor.detect_and_draw(gray_scale);
+            // auto gray_scale_feature_detection = extractor.detect_and_draw(gray_scale)
+
             cv::imshow("Main",buffer);
             // cv::imshow("Tertiary",gray_scale_feature_detection);
             cv::imshow("Histogram", hist_img_);
@@ -98,7 +99,7 @@ private:
     cv::Mat processed;
     cv::Mat gray_scale;
 
-    Utils::Histogram histogram_{Utils::Histogram::hist_config{}};
+    Utils::Histogram histogram_{Utils::hist_config{}};
     cv::Mat hist_img_;
 
     FeatureExtraction::SurfFeatureExtractor extractor{};
