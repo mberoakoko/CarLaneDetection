@@ -45,17 +45,21 @@ namespace FeatureExtraction{
             double ratio_s;
             double ratio_l;
         };
+        struct HighlightRemoverParams {
+            std::uint8_t lightness_threshold { 255 };
+            std::uint8_t saturation_threshold { 255 };
+        };
+        struct ShadowRemoverParams {
+            std::uint8_t shadow_threshold { 100 };
+        };
         struct ImageProcessorParams {
             double exposure_correctness_ratio = 1;
             ExposureCorrectnessStrat exposure_correctness_strat = ExposureCorrectnessStrat::PIX_VAL_NORMAL;
             SharpenImageParams sharpen_params {.sigma = 1, .threshold_value = 5, .amount = 1};
             WhiteBalanceParams white_balance_params = {.ratio_s = 1, .ratio_l = 1};
-            struct HighlightRemoverParams {
+            HighlightRemoverParams highlight_remover_params = {.lightness_threshold = 1, .saturation_threshold = 100};
+            ShadowRemoverParams shadow_remover_params = {.shadow_threshold = 255};
 
-            };
-            struct ShadowRemoverParams {
-
-            };
         };
         explicit ImagePreprocessor() = default;
         explicit ImagePreprocessor(const ImageProcessorParams &params) :
@@ -64,7 +68,10 @@ namespace FeatureExtraction{
         ration_l(params.white_balance_params.ratio_l),
         sigma(params.sharpen_params.amount),
         threshold_value(params.sharpen_params.threshold_value),
-        amount(params.sharpen_params.amount){
+        amount(params.sharpen_params.amount),
+        lightness_threshold(params.highlight_remover_params.lightness_threshold),
+        saturation_threshold(params.highlight_remover_params.saturation_threshold),
+        shadow_threshold(params.shadow_remover_params.shadow_threshold){
         };
         ~ImagePreprocessor() = default;
 
@@ -74,6 +81,8 @@ namespace FeatureExtraction{
             local_matrix = shadow_remover(local_matrix);
             local_matrix = exposure_balance(local_matrix);
             local_matrix = white_balance(local_matrix);
+            local_matrix = highlight_remover(local_matrix);
+            local_matrix = shadow_remover(local_matrix);
             return local_matrix;
         };
 
@@ -143,9 +152,21 @@ namespace FeatureExtraction{
             return result ;
         };
         auto highlight_remover(cv::Mat& hls_frame) -> cv::Mat {
+            std::vector<cv::Mat> channels {};
+            cv::split(hls_frame, channels);
+            cv::Mat lightness_condition_mask = channels[1] > lightness_threshold;
+            cv::Mat hue_condition_mask = channels[2] < saturation_threshold;
+            cv::Mat composed_condition_mask = (lightness_condition_mask & hue_condition_mask);
+            hls_frame.setTo(cv::Scalar(0, 0, 0), composed_condition_mask);
             return hls_frame;
         };
         auto shadow_remover(cv::Mat& hls_frame) -> cv::Mat {
+            std::vector<cv::Mat> channels {};
+            cv::split(hls_frame, channels);
+            cv::Mat shadow_threshold_mask = channels[1] < shadow_threshold ;
+            cv::Mat hue_condition_mask = channels[2] > saturation_threshold;
+            cv::Mat composed_condition_mask = (hue_condition_mask & shadow_threshold);
+            hls_frame.setTo(cv::Scalar(0, 0, 0), composed_condition_mask);
             return hls_frame;
         };
     private:
@@ -156,6 +177,9 @@ namespace FeatureExtraction{
         double sigma = 1;
         int threshold_value = 5;
         int amount = 1;
+        std::uint8_t lightness_threshold = 100;
+        std::uint8_t saturation_threshold = 100;
+        std::uint8_t shadow_threshold = 100;
     };
 
     class PerspectiveTransformer{ // Should Notify the two pipelines gradient filter and canny gaussian
