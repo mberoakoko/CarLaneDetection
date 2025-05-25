@@ -12,6 +12,7 @@
 
 namespace PipeLine {
     class lane_detection_pipeline {
+    public:
         virtual ~lane_detection_pipeline() = default;
         virtual auto execute(const cv::Mat& input_image) -> cv::Mat = 0;
     };
@@ -73,6 +74,24 @@ namespace PipeLine {
     };
 
     // TODO: use tag dispatching to enable the dispatching of various lane detection pipelines
+
+    class PrototypePipeline: public lane_detection_pipeline {
+    public:
+        explicit PrototypePipeline(std::unique_ptr<IEdgeDetection>detector)
+            :lane_detection_pipeline(),
+            detector_(std::move(detector)) {
+
+        }
+
+    public:
+        auto execute(const cv::Mat &input_image) -> cv::Mat override {
+            cv::Mat result = detector_->detect_edges(input_image);
+            return result;
+        }
+
+    private:
+        std::unique_ptr<IEdgeDetection> detector_;
+    };
 }
 
 #endif //PIPELINES_HPP

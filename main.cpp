@@ -7,6 +7,7 @@
 
 #include "src/utils/histogram.hpp"
 #include "src/utils/feature_extraction.hpp"
+#include "src/utils/pipelines.hpp"
 #include <ranges>
 #include <iterator>
 
@@ -29,22 +30,26 @@ namespace PipeLine{
 
 class WebCamStream{
 public:
-    explicit WebCamStream(){
+    explicit WebCamStream(): prototype_(PipeLine::PrototypePipeline(
+            std::make_unique<PipeLine::GradientMagnitudeEdgeDetection>(3)
+        )){
         cap_.open("../data/Highway_5_low_sun.mp4");
-        if(!cap_.isOpened()){
-            std::cout<<"Something went terribly wrong"<<std::endl;
+        if (!cap_.isOpened()) {
+            std::cout << "Something went terribly wrong" << std::endl;
         }
         cv::namedWindow("Main", cv::WINDOW_AUTOSIZE);
         // cv::namedWindow("Tertiary", cv::WINDOW_AUTOSIZE);
         cv::namedWindow("PerspectiveView", cv::WINDOW_FULLSCREEN);
         cv::namedWindow("PerspectiveTransformation", cv::WINDOW_AUTOSIZE);
         cv::namedWindow("Histogram", cv::WINDOW_AUTOSIZE);
+        cv::namedWindow("ProtoDetection", cv::WINDOW_AUTOSIZE);
 
         tf = this->initialize_transform_points();
         perspectiveTransformer = FeatureExtraction::PerspectiveTransformer{tf};
         const auto rect = cv::Rect2i(0, 0, 0, 0);
         perspectiveTransformer.set_window_dimension(const_cast<cv::Rect2i &>(rect));
     }
+
     ~WebCamStream(){
         cap_.release();
         cv::destroyAllWindows();
@@ -59,6 +64,13 @@ public:
             buffer = perspectiveTransformer.get_perspective_markers(buffer);
             auto perspective_image = perspectiveTransformer.get_transformation_frame(buffer);
             auto transformed_image = image_preprocessor(perspective_image);
+            auto prototype_image = prototype_.execute(
+                [&] {
+                    cv::Mat result;
+                    cv::cvtColor(transformed_image, result, cv::COLOR_BGR2RGB);
+                  return  result;
+                }()
+                );
             // cv::cvtColor(processed, gray_scale, cv::COLOR_BGR2GRAY);
 //            cv::threshold(gray_scale, gray_scale, 200, 250, cv::THRESH_BINARY);
             // cv::adaptiveThreshold(gray_scale, gray_scale,255, cv::ADAPTIVE_THRESH_MEAN_C,cv::THRESH_BINARY,11, 10);
@@ -72,6 +84,7 @@ public:
             cv::imshow("Histogram", hist_img_);
             cv::imshow("PerspectiveView", perspective_image);
             cv::imshow("PerspectiveTransformation", transformed_image);
+            cv::imshow("ProtoDetection", prototype_image);
             if (cv::waitKey(10) == 27){
                 break;
             }
@@ -106,6 +119,7 @@ private:
     FeatureExtraction::PerspectiveTransformer::transformation_points tf;
     FeatureExtraction::PerspectiveTransformer perspectiveTransformer {};
     FeatureExtraction::ImagePreprocessor image_preprocessor {};
+    PipeLine::PrototypePipeline prototype_;
 };
 
 template<typename  T>
@@ -145,6 +159,10 @@ void do_something_with_record(const std::unique_ptr<my_record> record){ // resou
     std::cout<<record->b<<std::endl;
 }
 
+template<typename Predicate, typename Func>
+auto transform_if(Predicate pred, Func func) {
+    return std::views::filter(pred) | std::views::transform(func);
+}
 int main() {
     WebCamStream webCamStream{};
     webCamStream.exec();
