@@ -8,5 +8,6 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 add_executable(CarLane main.cpp
         src/utils/histogram.hpp
-        src/utils/feature_extraction.hpp)
+        src/utils/feature_extraction.hpp
+        src/utils/pipelines.hpp)
 target_link_libraries( CarLane ${OpenCV_LIBS} )
