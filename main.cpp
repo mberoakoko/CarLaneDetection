@@ -8,13 +8,14 @@
 #include "src/utils/histogram.hpp"
 #include "src/utils/feature_extraction.hpp"
 #include "src/utils/pipelines.hpp"
+#include "src/utils/configuration.hpp"
 #include <ranges>
 #include <iterator>
 
 using rv = std::ranges::view_base;
 
 namespace PipeLine{
-    auto equalize_multi_channel(cv::Mat& input_image) -> cv::Mat{
+    auto equalize_multi_channel(const cv::Mat& input_image) -> cv::Mat{
         std::vector<cv::Mat> brg_channels;
         std::vector<cv::Mat> transformed_channels;
         cv::Mat result;
@@ -33,7 +34,7 @@ public:
     explicit WebCamStream(): prototype_(PipeLine::PrototypePipeline(
             std::make_unique<PipeLine::GradientMagnitudeEdgeDetection>(3)
         )){
-        cap_.open("../data/Highway_5_low_sun.mp4");
+        cap_.open(std::string(configuration::video_data_constants::ND_19_DateSet));
         if (!cap_.isOpened()) {
             std::cout << "Something went terribly wrong" << std::endl;
         }

@@ -85,23 +85,22 @@ namespace PipeLine {
         };
 
         static auto calculate_histogram_edges(const cv::Mat &input_image) -> HistogramEdges {
-            std::uint16_t mid_point_0_axis = ::round(input_image.rows()/2);
-            std::uint16_t mid_point_1_axis = ::round(input_image.cols()/2);
+            std::uint16_t mid_point_0_axis = ::round(input_image.rows/2);
+            std::uint16_t mid_point_1_axis = ::round(input_image.cols/2);
             cv::Mat lower_region = input_image(
-                cv::Range(mid_point_0_axis, input_image.rows()), cv::Range::all()
+                cv::Range(mid_point_0_axis, input_image.rows), cv::Range::all()
                 );
             cv::Mat hist_data ;
-            cv:std::reduce(lower_region, hist_data, 0, cv::REDUCE_SUM);
+            // std::reduce(lower_region, hist_data, 0, cv::REDUCE_SUM);
             auto min_along_axis = [](const cv::Mat& data_mat) -> std::uint16_t {
                 cv::Point min_loc;
                 cv::minMaxLoc(data_mat, nullptr, nullptr, &min_loc, nullptr);
                 return static_cast<std::uint16_t>(min_loc.x);
             };
-            ;
             return {
                 .histogram_data = hist_data,
                 .left_edge = min_along_axis(hist_data(cv::Range(0, mid_point_0_axis), cv::Range::all())),
-                .right_edge = min_along_axis(hist_data(cv::Range(mid_point_0_axis, hist_data.rows()), cv::Range::all()))
+                .right_edge = min_along_axis(hist_data(cv::Range(mid_point_0_axis, hist_data.rows), cv::Range::all()))
             };
         };
 
