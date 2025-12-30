@@ -111,20 +111,13 @@ namespace FeatureExtraction{
             double minVal, maxVal;
             std::vector<cv::Mat> channels;
             cv::split(hls_frame, channels);
-            auto l_channel = channels[1];
-            cv::Scalar mean_pixel_value { cv::mean(l_channel) };;
+            cv::Mat l_channel ;
+            channels[1].convertTo(l_channel, CV_32F);
+
+            cv::Scalar mean_pixel_value { cv::mean(l_channel) };
             cv::minMaxLoc(l_channel, &minVal, &maxVal);
 
-            // normalization strategies
-            auto pix_val_exposure_correct =  [&](auto pix_value) {
-                auto result = (pix_value - minVal) / ((maxVal - minVal) * (pix_value - mean_pixel_value.val[0]) * exposure_correctness_ratio);
-                return result;
-            };
-
-            auto pix_val_normal_mean = [&](auto pix_value) {
-                return (pix_value - minVal) / (maxVal - minVal) * 255.0;
-            };
-
+            if (std::abs(maxVal - minVal) < 1e-5) return hls_frame;
 
             switch (exposure_correctness_strat_) {
                 case ExposureCorrectnessStrat::PIX_VAL_NORMAL:
@@ -167,23 +160,26 @@ namespace FeatureExtraction{
             cv::merge(channels, result);
             return result ;
         };
-        auto highlight_remover(cv::Mat& hls_frame) -> cv::Mat {
+        auto highlight_remover(const cv::Mat& hls_frame) const -> cv::Mat {
             std::vector<cv::Mat> channels {};
             cv::split(hls_frame, channels);
             cv::Mat lightness_condition_mask = channels[1] > lightness_threshold;
             cv::Mat hue_condition_mask = channels[2] < saturation_threshold;
             cv::Mat composed_condition_mask = (lightness_condition_mask & hue_condition_mask);
-            hls_frame.setTo(cv::Scalar(0, 0, 0), composed_condition_mask);
-            return hls_frame;
+
+            cv::Mat result = hls_frame.clone();
+            result.setTo(cv::Scalar(0, 0, 0), composed_condition_mask);
+            return result;
         };
-        auto shadow_remover(cv::Mat& hls_frame) -> cv::Mat {
+        auto shadow_remover(const cv::Mat& hls_frame) const -> cv::Mat {
             std::vector<cv::Mat> channels {};
             cv::split(hls_frame, channels);
             cv::Mat shadow_threshold_mask = channels[1] < shadow_threshold ;
             cv::Mat hue_condition_mask = channels[2] > saturation_threshold;
-            cv::Mat composed_condition_mask = (hue_condition_mask & shadow_threshold);
-            hls_frame.setTo(cv::Scalar(0, 0, 0), composed_condition_mask);
-            return hls_frame;
+            cv::Mat composed_condition_mask = (hue_condition_mask & shadow_threshold_mask);
+            cv::Mat result = hls_frame.clone();
+            result.setTo(cv::Scalar(0, 0, 0), composed_condition_mask);
+            return result;
         };
     private:
         double exposure_correctness_ratio = 1.0;

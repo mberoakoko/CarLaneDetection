@@ -121,7 +121,6 @@ namespace PipeLine {
 
         }
 
-    public:
         auto execute(const cv::Mat &input_image) -> cv::Mat override {
             cv::Mat result = detector_->detect_edges(input_image);
             return result;

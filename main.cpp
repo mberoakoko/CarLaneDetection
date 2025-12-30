@@ -65,13 +65,12 @@ public:
             buffer = perspectiveTransformer.get_perspective_markers(buffer);
             auto perspective_image = perspectiveTransformer.get_transformation_frame(buffer);
             auto transformed_image = image_preprocessor(perspective_image);
-            auto prototype_image = prototype_.execute(
-                [&] {
-                    cv::Mat result;
-                    cv::cvtColor(transformed_image, result, cv::COLOR_BGR2RGB);
-                  return  result;
-                }()
-                );
+            cv::Mat img_ = [&] {
+                cv::Mat result;
+                cv::cvtColor(transformed_image, result, cv::COLOR_BGR2RGB);
+                return  result;
+            }();
+            auto prototype_image = prototype_.execute(img_);
             // cv::cvtColor(processed, gray_scale, cv::COLOR_BGR2GRAY);
 //            cv::threshold(gray_scale, gray_scale, 200, 250, cv::THRESH_BINARY);
             // cv::adaptiveThreshold(gray_scale, gray_scale,255, cv::ADAPTIVE_THRESH_MEAN_C,cv::THRESH_BINARY,11, 10);
