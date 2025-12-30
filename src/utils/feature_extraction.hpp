@@ -246,12 +246,12 @@ namespace FeatureExtraction{
 
 
             /**
-             *
+             * Simpy perform hugh transform
              * @param image
              * @param config
              * @return
              */
-            static auto line_transformation(
+            static auto hugh_transformation(
                 const cv::Mat& image,
                 const ConfigHughlineP config = {
                 .rho = 1.0,
@@ -263,14 +263,49 @@ namespace FeatureExtraction{
                 cv::HoughLinesP(image, lines, config.rho, config.theta, config.mininum_line_length, config.threshold);
                 return  lines;
             }
+
+            auto line_detection(const cv::Mat& image) -> LinesArray {
+                if (images_.size() < max_cache_size_) {
+                    images_.push_front(image);
+                } else {
+                    images_.pop_back();
+                    images_.push_front(image);
+                };
+                std::vector<LinesArray> lines_result;
+                std::transform(images_.begin(), images_.end(), lines_result.begin(),
+                    [this](const cv::Mat& image) {
+                            cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
+                            return HughTranformConsensus::hugh_transformation(image, this->config_.hugh_line_config);
+                    });
+
+                const auto flattened_view = lines_result | std::ranges::views::join;
+                return LinesArray{flattened_view.begin(), flattened_view.end()};
+
+            }
         public:
-            explicit HughTranformConsensus(const std::vector<cv::Mat>& images) {}
+            struct LineTransfromConfig {
+                CannyEdgeDetectionConfig canny_config;
+                ConfigHughlineP hugh_line_config;
+            };
+            explicit HughTranformConsensus(std::deque<cv::Mat>& images, int max_cache_size, const LineTransfromConfig& config)
+            :images_(images),
+            max_cache_size_(max_cache_size),
+            config_(config) {
+
+            }
+
+
+
+        private:
+            std::deque<cv::Mat>& images_;
+            const LineTransfromConfig config_;
+            int max_cache_size_;
 
         };
 
         class VanishingPointCalibration final: public IPerspectiveTransformer {
         private:
-            std::vector<cv::Mat> image_cache_;
+            std::stack<cv::Mat> image_cache_;
 
         public:
             struct VanishingPoint {
