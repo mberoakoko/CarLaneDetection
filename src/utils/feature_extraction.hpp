@@ -76,14 +76,26 @@ namespace FeatureExtraction{
         ~ImagePreprocessor() = default;
 
         auto operator()(cv::Mat& source) -> cv::Mat {
-            cv::Mat local_matrix ;;
-            cv::cvtColor(source, local_matrix, cv::COLOR_RGB2HLS);
-            local_matrix = shadow_remover(local_matrix);
-            local_matrix = exposure_balance(local_matrix);
-            local_matrix = white_balance(local_matrix);
-            local_matrix = highlight_remover(local_matrix);
-            local_matrix = shadow_remover(local_matrix);
-            return local_matrix;
+
+            if (source.empty()) { return source;}
+
+            const cv::Mat hls = [&source] -> cv::Mat {
+                cv::Mat local_matrix;
+                cv::cvtColor(source, local_matrix, cv::COLOR_RGB2HLS);
+                return local_matrix;
+            }();
+
+
+            const cv::Mat pipeline_result = [&hls, this] {
+                cv::Mat temp = shadow_remover(hls);
+                temp = exposure_balance(temp);
+                temp = white_balance(temp);
+                temp = highlight_remover(temp);
+                temp = shadow_remover(temp);
+                return temp;
+            }();
+
+            return pipeline_result;
         };
 
     private:
