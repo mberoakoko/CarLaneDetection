@@ -119,7 +119,8 @@ namespace FeatureExtraction{
                     l_channel = (l_channel - minVal) * (255 / (maxVal - minVal));
                     break;
                 case ExposureCorrectnessStrat::PIX_VAL_EXP_CORRECT:
-                    std::transform(l_channel.begin<double>(), l_channel.end<double>(),l_channel.begin<double>(), pix_val_exposure_correct);
+                    cv::Mat denominator = (maxVal - minVal) * (l_channel - mean_pixel_value) * exposure_correctness_ratio;
+                    cv::divide((l_channel - minVal), denominator, l_channel);
                     break;
             }
 
