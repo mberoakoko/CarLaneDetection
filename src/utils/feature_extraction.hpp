@@ -282,6 +282,56 @@ namespace FeatureExtraction{
                 return LinesArray{flattened_view.begin(), flattened_view.end()};
 
             }
+
+            auto filter_horizantal_lines(const LinesArray& lines) const -> LinesArray {
+                auto is_horizantal = [this](const cv::Vec4i& line) -> bool {
+                    auto theta = line[1];
+                    float targetTheta = CV_PI / 2.0; // 90 degrees
+                    float deltaRad = this->config_.line_filter_config.delta_deg * (CV_PI / 180.0);
+                    return std::abs(theta - targetTheta) < deltaRad;
+                };
+                auto filter_view = lines | std::views::filter(is_horizantal);
+                return LinesArray{filter_view.begin(), filter_view.end()};
+            }
+
+            static auto get_intersection(const cv::Vec4i& line_1, const cv::Vec4i& line_2) -> IntersectionResultType {
+                const float x1 = line_1[0], y1 = line_1[1], x2 = line_1[2], y2 = line_1[3];
+                const float x3 = line_2[0], y3 = line_2[1], x4 = line_2[2], y4 = line_2[3];
+
+                const float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+                // The "Parallel" Failure Case
+                if (std::abs(denom) < 1e-6f) {
+                    return std::nullopt; // The "Bad" Track
+                }
+
+                cv::Point2f pt;
+                pt.x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom;
+                pt.y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom;
+
+                return pt;
+            }
+
+            static auto find_vanishing_point(const std::vector<cv::Point2f>& intersections) -> cv::Point2f {
+                if (intersections.empty()) return cv::Point2f(0, 0);
+
+                cv::Point2f sum(0, 0);
+                for (const auto& pt : intersections) {
+                    sum += pt;
+                }
+
+                return cv::Point2f(sum.x / intersections.size(), sum.y / intersections.size());
+            }
+
+            auto get_vanishing_point(const cv::Mat& image) -> cv::Point2f {
+                LinesArray lines = filter_horizantal_lines(line_detection(image));
+                auto left_batch = lines | std::views::drop(1);
+                auto right_batch = lines | std::views::take(lines.size() - 1);
+                auto zipped = std::views::zip(left_batch, right_batch);
+                auto intersections = zipped | std::views::transform(get_intersection);
+                // filter then reduce with find vanishing point
+            }
+
         public:
             struct LineTransfromConfig {
                 CannyEdgeDetectionConfig canny_config;
