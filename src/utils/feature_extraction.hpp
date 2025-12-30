@@ -124,7 +124,11 @@ namespace FeatureExtraction{
                     break;
             }
 
-            return hls_frame;
+            l_channel.convertTo(channels[1], CV_8U);
+
+            cv::Mat result;
+            cv::merge(channels, result);
+            return result;
 
         };
         auto white_balance(cv::Mat& hls_frame) const -> cv::Mat {
