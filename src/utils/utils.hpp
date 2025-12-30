@@ -52,7 +52,7 @@ namespace utils {
 
             cv::Mat canvas = cv::Mat::zeros(tile_h * 2, tile_w * 3, CV_8UC3);
 
-            auto draw_tile = [&](const cv::Mat& img, int row, int col, std::string label) {
+            auto draw_tile = [&](const cv::Mat& img, const int row, const int col, const std::string &label) -> void  {
                 if (img.empty()) return;
 
                 cv::Rect region_of_interest(col * tile_w, row * tile_h, tile_w, tile_h);
