@@ -194,6 +194,100 @@ namespace FeatureExtraction{
         std::uint8_t shadow_threshold = 100;
     };
 
+
+    namespace perspective_transformation {
+        class IPerspectiveTransformer {
+        public:
+            virtual ~IPerspectiveTransformer() = default;
+            virtual auto get_perspective_markers(const cv::Mat& mat ) -> cv::Mat;
+            virtual auto get_transformation_points(const cv::Mat& mat ) -> cv::Mat;
+        };
+
+
+        class HughTranformConsensus {
+        public:
+
+            struct CannyEdgeDetectionConfig {
+                cv::Size blur_size ;
+                double threshold;
+                double ration;
+                int arpeture_size;
+
+                auto upper_val() const -> double { return  threshold * ration; }
+            };
+
+            struct ConfigHughlineP {
+                double rho = 1.0;
+                double theta = CV_PI/180;
+                int threshold = 80;
+                double mininum_line_length = 10.0;
+            };
+
+            using LinesArray = std::vector<cv::Vec4i>;
+        private:
+            /**
+             * Simply Detect edges
+             * @param image
+             * @param config
+             * @return
+             */
+            static auto canny_edge_detector(const cv::Mat& image ,
+                                            const CannyEdgeDetectionConfig config = {
+                                                .blur_size = cv::Size{3, 3},
+                                                .threshold = 10,
+                                                .ration = 10,
+                                                .arpeture_size = 3
+                                            }) {
+                cv::Mat result;
+                cv::blur(image, result, config.blur_size);
+                cv::Canny(result, result, config.threshold, config.threshold * config.ration, config.arpeture_size);
+                return result;
+            }
+
+
+            /**
+             *
+             * @param image
+             * @param config
+             * @return
+             */
+            static auto line_transformation(
+                const cv::Mat& image,
+                const ConfigHughlineP config = {
+                .rho = 1.0,
+                .theta = CV_PI/180,
+                .threshold = 80,
+                .mininum_line_length = 10.0,
+            }) -> LinesArray{
+                LinesArray lines;
+                cv::HoughLinesP(image, lines, config.rho, config.theta, config.mininum_line_length, config.threshold);
+                return  lines;
+            }
+        public:
+            explicit HughTranformConsensus(const std::vector<cv::Mat>& images) {}
+
+        };
+
+        class VanishingPointCalibration final: public IPerspectiveTransformer {
+        private:
+            std::vector<cv::Mat> image_cache_;
+
+        public:
+            struct VanishingPoint {
+                cv::Point2f px;
+                cv::Point2f py;
+            };
+
+            explicit VanishingPointCalibration() = default;
+
+
+
+        };
+    }
+
+
+
+
     class PerspectiveTransformer{ // Should Notify the two pipelines gradient filter and canny gaussian
     public:
         struct transformation_points{
