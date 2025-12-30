@@ -130,6 +130,23 @@ namespace PipeLine {
     private:
         std::unique_ptr<IEdgeDetection> detector_;
     };
+
+    class EdgeDetectionPipeline: public ILaneDetectionPipeline {
+    private:
+        std::vector<IEdgeDetection*> steps_;
+    public:
+        explicit EdgeDetectionPipeline(std::initializer_list<IEdgeDetection *> detection_modules): steps_(detection_modules){}
+        auto execute(const cv::Mat &input_image) -> cv::Mat override {
+            cv::Mat result, intermediate;
+            cv::copyTo(input_image, intermediate, cv::noArray());
+            for (const auto item: steps_) {
+                intermediate = item->detect_edges(intermediate);
+            }
+
+            cv::copyTo(intermediate, result, cv::noArray());
+            return result;
+        }
+    };
 }
 
 #endif //PIPELINES_HPP
