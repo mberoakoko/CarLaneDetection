@@ -116,8 +116,7 @@ namespace FeatureExtraction{
 
             switch (exposure_correctness_strat_) {
                 case ExposureCorrectnessStrat::PIX_VAL_NORMAL:
-                    std::transform(l_channel.begin<double>(), l_channel.end<double>(),
-                l_channel.begin<double>(), pix_val_normal_mean);
+                    l_channel = (l_channel - minVal) * (255 / (maxVal - minVal));
                     break;
                 case ExposureCorrectnessStrat::PIX_VAL_EXP_CORRECT:
                     std::transform(l_channel.begin<double>(), l_channel.end<double>(),l_channel.begin<double>(), pix_val_exposure_correct);
