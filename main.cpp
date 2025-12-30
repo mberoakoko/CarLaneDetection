@@ -9,6 +9,7 @@
 #include "src/utils/feature_extraction.hpp"
 #include "src/utils/pipelines.hpp"
 #include "src/utils/configuration.hpp"
+#include "src/utils/utils.hpp"
 #include <ranges>
 #include <iterator>
 
@@ -36,14 +37,14 @@ public:
         )){
         cap_.open(std::string(configuration::video_data_constants::ND_19_DateSet));
         if (!cap_.isOpened()) {
-            std::cout << "Something went terribly wrong" << std::endl;
+            std::cerr << "Something went terribly wrong" << std::endl;
         }
         cv::namedWindow("Main", cv::WINDOW_AUTOSIZE);
         // cv::namedWindow("Tertiary", cv::WINDOW_AUTOSIZE);
-        cv::namedWindow("PerspectiveView", cv::WINDOW_FULLSCREEN);
-        cv::namedWindow("PerspectiveTransformation", cv::WINDOW_AUTOSIZE);
-        cv::namedWindow("Histogram", cv::WINDOW_AUTOSIZE);
-        cv::namedWindow("ProtoDetection", cv::WINDOW_AUTOSIZE);
+        // cv::namedWindow("PerspectiveView", cv::WINDOW_FULLSCREEN);
+        // cv::namedWindow("PerspectiveTransformation", cv::WINDOW_AUTOSIZE);
+        // cv::namedWindow("Histogram", cv::WINDOW_AUTOSIZE);
+        // cv::namedWindow("ProtoDetection", cv::WINDOW_AUTOSIZE);
 
         tf = this->initialize_transform_points();
         perspectiveTransformer = FeatureExtraction::PerspectiveTransformer{tf};
@@ -57,7 +58,12 @@ public:
     }
     auto exec() -> void{
         while (true){
-            cap_.read(buffer);
+            bool success = cap_.read(buffer);
+            if (!success) {
+                std::cout << "Finished reading the video ! " << std::endl;
+                return;
+            }
+
             buffer.copyTo(processed);
             histogram_.generate_histogram(buffer, {Utils::ImageType::YUV}).copyTo(hist_img_);
 
@@ -71,20 +77,17 @@ public:
                 return  result;
             }();
             auto prototype_image = prototype_.execute(img_);
-            // cv::cvtColor(processed, gray_scale, cv::COLOR_BGR2GRAY);
-//            cv::threshold(gray_scale, gray_scale, 200, 250, cv::THRESH_BINARY);
-            // cv::adaptiveThreshold(gray_scale, gray_scale,255, cv::ADAPTIVE_THRESH_MEAN_C,cv::THRESH_BINARY,11, 10);
-//            auto size = cv::Size (1, 2);
-            // cv::medianBlur(gray_scale, gray_scale, 1);
 
-            // auto gray_scale_feature_detection = extractor.detect_and_draw(gray_scale)
+            auto dash_image = utils::display_utils::create_dashboard({
+                .main = buffer,
+                .histogram = hist_img_,
+                .perspective = perspective_image,
+                .transformed =  transformed_image,
+                .proto =  prototype_image,
+            });
 
-            cv::imshow("Main",buffer);
-            // cv::imshow("Tertiary",gray_scale_feature_detection);
-            cv::imshow("Histogram", hist_img_);
-            cv::imshow("PerspectiveView", perspective_image);
-            cv::imshow("PerspectiveTransformation", transformed_image);
-            cv::imshow("ProtoDetection", prototype_image);
+            cv::imshow("Main",dash_image);
+
             if (cv::waitKey(10) == 27){
                 break;
             }

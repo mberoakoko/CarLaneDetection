@@ -2,9 +2,14 @@
 // Created by mbero on 19/05/2025.
 //
 
-#include <bits/stdc++.h>
+
 #ifndef UTILS_HPP
 #define UTILS_HPP
+
+#include <bits/stdc++.h>
+#include <opencv2/imgproc.hpp>
+
+#include "opencv2/core/core.hpp"
 
 namespace utils {
     template<typename T>

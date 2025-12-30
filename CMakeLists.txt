@@ -10,5 +10,6 @@ add_executable(CarLane main.cpp
         src/utils/histogram.hpp
         src/utils/feature_extraction.hpp
         src/utils/pipelines.hpp
-        src/utils/configuration.hpp)
+        src/utils/configuration.hpp
+        src/utils/utils.hpp)
 target_link_libraries( CarLane ${OpenCV_LIBS} )
