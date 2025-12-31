@@ -35,7 +35,7 @@ public:
     explicit WebCamStream(): prototype_(PipeLine::PrototypePipeline(
             std::make_unique<PipeLine::GradientMagnitudeEdgeDetection>(3)
         )){
-        cap_.open(std::string(configuration::video_data_constants::ND_19_DateSet));
+        cap_.open(std::string(configuration::video_data_constants::challange_dataset));
         if (!cap_.isOpened()) {
             std::cerr << "Something went terribly wrong" << std::endl;
         }

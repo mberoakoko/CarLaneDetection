@@ -7,7 +7,6 @@
 #include <bits/stdc++.h>
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
-#include "opencv2/highgui/highgui.hpp"
 
 namespace FeatureExtraction{
     class SurfFeatureExtractor{
@@ -16,11 +15,11 @@ namespace FeatureExtraction{
         explicit SurfFeatureExtractor() = default;
         ~SurfFeatureExtractor()= default;
 
-        auto detect(cv::Mat& source){
+        auto detect(const cv::Mat& source){
             extractor_->detect(source, key_points_);
         }
 
-        auto detect_and_draw(cv::Mat& source) -> cv::Mat{
+        auto detect_and_draw(const cv::Mat& source) -> cv::Mat{
             this->detect(source);
             cv::drawKeypoints(source, key_points_, extracted_image);
             return extracted_image;
@@ -75,7 +74,7 @@ namespace FeatureExtraction{
         };
         ~ImagePreprocessor() = default;
 
-        auto operator()(cv::Mat& source) -> cv::Mat {
+        auto operator()(cv::Mat& source) const -> cv::Mat {
 
             if (source.empty()) { return source;}
 
@@ -99,15 +98,15 @@ namespace FeatureExtraction{
         };
 
     private:
-        auto sharpen_image(cv::Mat& hls_frame) const -> cv::Mat {
-            cv::Mat blurred;
+        auto sharpen_image(const cv::Mat& hls_frame) const -> cv::Mat {
+            const cv::Mat blurred;
             cv::GaussianBlur(hls_frame, blurred, cv::Size(blurred.cols, blurred.rows), sigma, amount);
-            cv::Mat low_contrast_matrix = cv::abs(hls_frame -  blurred) < threshold_value;
-            cv::Mat sharpened_image = hls_frame * (1 + amount) - blurred * (-amount);
+            const cv::Mat low_contrast_matrix = cv::abs(hls_frame -  blurred) < threshold_value;
+            const cv::Mat sharpened_image = hls_frame * (1 + amount) - blurred * (-amount);
             hls_frame.copyTo(sharpened_image, low_contrast_matrix);
             return sharpened_image;
         }
-        auto exposure_balance(cv::Mat& hls_frame) -> cv::Mat {
+        auto exposure_balance(cv::Mat& hls_frame) const -> cv::Mat {
             double minVal, maxVal;
             std::vector<cv::Mat> channels;
             cv::split(hls_frame, channels);
@@ -203,6 +202,31 @@ namespace FeatureExtraction{
             virtual auto get_transformation_points(const cv::Mat& mat ) -> cv::Mat;
         };
 
+        namespace util {
+            template <typename F>
+            struct filter_map_adaptor : std::ranges::range_adaptor_closure<filter_map_adaptor<F>> {
+                F func;
+                constexpr filter_map_adaptor(F f) : func(std::move(f)) {}
+
+                // This is where the magic happens
+                template <std::ranges::viewable_range R>
+                constexpr auto operator()(R&& r) const {
+                    return std::forward<R>(r)
+                         | std::views::transform(func)
+                         | std::views::filter([](const auto& opt) { return opt.has_value(); })
+                         | std::views::transform([](const auto& opt) { return *opt; });
+                }
+            };
+
+            inline auto filter_map = []<typename Func>(Func && func){
+                return filter_map_adaptor<std::decay<Func>>(std::forward<Func>(func));
+            };
+
+            inline auto compose = []<typename F , typename G>(F&& f, G && g){
+                return std::forward<F>(f)(std::forward<G>(g));
+            };
+        }
+
 
         class HughTranformConsensus {
         public:
@@ -223,7 +247,12 @@ namespace FeatureExtraction{
                 double mininum_line_length = 10.0;
             };
 
+            struct ConfigLineFilter {
+                float delta_deg;
+            };
+
             using LinesArray = std::vector<cv::Vec4i>;
+            using IntersectionResultType = std::optional<cv::Point2f>;
         private:
             /**
              * Simply Detect edges
@@ -232,7 +261,7 @@ namespace FeatureExtraction{
              * @return
              */
             static auto canny_edge_detector(const cv::Mat& image ,
-                                            const CannyEdgeDetectionConfig config = {
+                                            const CannyEdgeDetectionConfig &config = {
                                                 .blur_size = cv::Size{3, 3},
                                                 .threshold = 10,
                                                 .ration = 10,
@@ -253,7 +282,7 @@ namespace FeatureExtraction{
              */
             static auto hugh_transformation(
                 const cv::Mat& image,
-                const ConfigHughlineP config = {
+                const ConfigHughlineP &config = {
                 .rho = 1.0,
                 .theta = CV_PI/180,
                 .threshold = 80,
@@ -264,7 +293,7 @@ namespace FeatureExtraction{
                 return  lines;
             }
 
-            auto line_detection(const cv::Mat& image) -> LinesArray {
+            auto line_detection(const cv::Mat& image) const -> LinesArray {
                 if (images_.size() < max_cache_size_) {
                     images_.push_front(image);
                 } else {
@@ -272,28 +301,30 @@ namespace FeatureExtraction{
                     images_.push_front(image);
                 };
                 std::vector<LinesArray> lines_result;
-                std::transform(images_.begin(), images_.end(), lines_result.begin(),
-                    [this](const cv::Mat& image) {
-                            cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
-                            return HughTranformConsensus::hugh_transformation(image, this->config_.hugh_line_config);
-                    });
+                std::ranges::transform(images_, lines_result.begin(),
+                                       [this](const cv::Mat& image) {
+                                           cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
+                                           return HughTranformConsensus::hugh_transformation(image, this->config_.hugh_line_config);
+                                       });
 
                 const auto flattened_view = lines_result | std::ranges::views::join;
                 return LinesArray{flattened_view.begin(), flattened_view.end()};
-
             }
 
             auto filter_horizantal_lines(const LinesArray& lines) const -> LinesArray {
-                auto is_horizantal = [this](const cv::Vec4i& line) -> bool {
-                    auto theta = line[1];
-                    float targetTheta = CV_PI / 2.0; // 90 degrees
-                    float deltaRad = this->config_.line_filter_config.delta_deg * (CV_PI / 180.0);
-                    return std::abs(theta - targetTheta) < deltaRad;
+                auto is_horizontal = [this](const cv::Vec4i& l) {
+                    float dx = l[2] - l[0];
+                    float dy = l[3] - l[1];
+                    float angle = std::abs(std::atan2(dy, dx) * 180.0 / CV_PI);
+                    // Horizontal is near 0 or 180 degrees
+                    return angle < config_.line_filter_config.delta_deg ||
+                           angle > (180.0 - config_.line_filter_config.delta_deg);
                 };
-                auto filter_view = lines | std::views::filter(is_horizantal);
-                return LinesArray{filter_view.begin(), filter_view.end()};
-            }
 
+                auto filterd_veiw = lines | std::views::filter(is_horizontal);
+
+                return LinesArray(std::begin(filterd_veiw), std::end(filterd_veiw));
+            }
             static auto get_intersection(const cv::Vec4i& line_1, const cv::Vec4i& line_2) -> IntersectionResultType {
                 const float x1 = line_1[0], y1 = line_1[1], x2 = line_1[2], y2 = line_1[3];
                 const float x3 = line_2[0], y3 = line_2[1], x4 = line_2[2], y4 = line_2[3];
@@ -323,24 +354,48 @@ namespace FeatureExtraction{
                 return cv::Point2f(sum.x / intersections.size(), sum.y / intersections.size());
             }
 
-            auto get_vanishing_point(const cv::Mat& image) -> cv::Point2f {
-                LinesArray lines = filter_horizantal_lines(line_detection(image));
-                auto left_batch = lines | std::views::drop(1);
-                auto right_batch = lines | std::views::take(lines.size() - 1);
-                auto zipped = std::views::zip(left_batch, right_batch);
-                auto intersections = zipped | std::views::transform(get_intersection);
-                // filter then reduce with find vanishing point
-            }
 
         public:
+
+
             struct LineTransfromConfig {
                 CannyEdgeDetectionConfig canny_config;
                 ConfigHughlineP hugh_line_config;
+                ConfigLineFilter line_filter_config;
             };
+
+
+
             explicit HughTranformConsensus(std::deque<cv::Mat>& images, int max_cache_size, const LineTransfromConfig& config)
             :images_(images),
-            max_cache_size_(max_cache_size),
-            config_(config) {
+            config_(config),
+            max_cache_size_(max_cache_size) {
+
+            }
+
+
+            auto get_vanishing_point(const cv::Mat& image) const -> cv::Point2f {
+
+                auto filter_map = []<typename R, typename T0>(R&& range, T0&& func) {
+                    return std::forward<R>(range)
+                            | std::views::transform(std::forward<T0>(func))
+                            | std::views::filter([](const auto& opt) { return opt.has_value(); })
+                            | std::views::transform([](const auto& opt) { return opt.value(); });
+                };
+
+                auto pair_to_intersection_result = [](auto && pair) -> IntersectionResultType {
+                    return get_intersection(std::get<0>(pair), std::get<1>(pair));
+                };
+
+                LinesArray lines = filter_horizantal_lines(line_detection(image));
+
+                auto intersections = filter_map(
+                    lines | std::views::adjacent<2>, // creates a pair view
+                    pair_to_intersection_result);
+
+                std::vector<cv::Point2f> intersections_result{intersections.begin(), intersections.end()};
+                cv::Point2f vanishing_point = find_vanishing_point(intersections_result);
+                return vanishing_point;
 
             }
 
@@ -356,14 +411,14 @@ namespace FeatureExtraction{
         class VanishingPointCalibration final: public IPerspectiveTransformer {
         private:
             std::stack<cv::Mat> image_cache_;
-
+            HughTranformConsensus consensus_;
         public:
             struct VanishingPoint {
                 cv::Point2f px;
                 cv::Point2f py;
             };
 
-            explicit VanishingPointCalibration() = default;
+            explicit VanishingPointCalibration(const HughTranformConsensus& consensus): consensus_(consensus){};
 
 
 
@@ -382,12 +437,12 @@ namespace FeatureExtraction{
             cv::Point2f bottom_right;
         };
         explicit PerspectiveTransformer()= default;
-        explicit PerspectiveTransformer(transformation_points& transformationPoints): points_(transformationPoints){
+        explicit PerspectiveTransformer(const transformation_points& transformationPoints): points_(transformationPoints){
             points_s1_ = {points_.top_left, points_.bottom_left, points_.top_right, points_.bottom_right};
         }
 //        explicit PerspectiveTransformer(std::initializer_list<transformation_points> tranformation_points):
 
-        auto set_window_dimension(cv::Rect2i & rect) -> void {
+        auto set_window_dimension(const cv::Rect2i & rect) -> void {
             window_dimention = rect;
             points_2 = transformation_points{
                     .top_left = cv::Point2f (0, 0),

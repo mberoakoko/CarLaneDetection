@@ -11,6 +11,7 @@ namespace configuration {
     namespace video_data_constants {
         constexpr std::string_view ND_19_DateSet {"../data/normal_day/ND_19.mp4"};
         constexpr std::string_view ND_4_Dataset {"../data/normal_day/ND_4.mp4"};
+        constexpr std::string_view challange_dataset {"../data/normal_day/carlane_video_1.mp4"};
 
 
     }
