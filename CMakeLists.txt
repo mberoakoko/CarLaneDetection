@@ -11,5 +11,6 @@ add_executable(CarLane main.cpp
         src/utils/feature_extraction.hpp
         src/utils/pipelines.hpp
         src/utils/configuration.hpp
-        src/utils/utils.hpp)
+        src/utils/utils.hpp
+        src/components/geometry_extraction.hpp)
 target_link_libraries( CarLane ${OpenCV_LIBS} )

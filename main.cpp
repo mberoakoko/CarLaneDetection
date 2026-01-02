@@ -49,7 +49,7 @@ public:
         tf = this->initialize_transform_points();
         perspectiveTransformer = FeatureExtraction::PerspectiveTransformer{tf};
         const auto rect = cv::Rect2i(0, 0, 0, 0);
-        perspectiveTransformer.set_window_dimension(const_cast<cv::Rect2i &>(rect));
+        perspectiveTransformer.set_window_dimension(rect);
     }
 
     ~WebCamStream(){
@@ -67,15 +67,22 @@ public:
             buffer.copyTo(processed);
             histogram_.generate_histogram(buffer, {Utils::ImageType::YUV}).copyTo(hist_img_);
 
-            // buffer = PipeLine::equalize_multi_channel(buffer);
-            buffer = perspectiveTransformer.get_perspective_markers(buffer);
+            buffer = perspectiveTransformer.set_perspective_markers_on_image(buffer);
+            cv::Mat vanishing_img_resize;
+            cv::resize(buffer, vanishing_img_resize,cv::Size{}, 0.5, 0.5, cv::INTER_LINEAR);
+            v_p_calibrator.set_perspetive_markers_on_image(vanishing_img_resize);
+
             auto perspective_image = perspectiveTransformer.get_transformation_frame(buffer);
             auto transformed_image = image_preprocessor(perspective_image);
+
+
             cv::Mat img_ = [&] {
                 cv::Mat result;
                 cv::cvtColor(transformed_image, result, cv::COLOR_BGR2RGB);
                 return  result;
             }();
+
+
             auto prototype_image = prototype_.execute(img_);
 
             auto dash_image = utils::display_utils::create_dashboard({
@@ -121,6 +128,11 @@ private:
     FeatureExtraction::SurfFeatureExtractor extractor{};
     FeatureExtraction::PerspectiveTransformer::transformation_points tf;
     FeatureExtraction::PerspectiveTransformer perspectiveTransformer {};
+
+    FeatureExtraction::perspective_transformation::VanishingPointCalibration v_p_calibrator{
+        10,
+        FeatureExtraction::perspective_transformation::HughTranformConsensus::create_default_config()
+    };
     FeatureExtraction::ImagePreprocessor image_preprocessor {};
     PipeLine::PrototypePipeline prototype_;
 };

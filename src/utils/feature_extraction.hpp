@@ -5,6 +5,8 @@
 #ifndef CARLANEDETECTION_FEATURE_EXTRACTION_HPP
 #define CARLANEDETECTION_FEATURE_EXTRACTION_HPP
 #include <bits/stdc++.h>
+
+#include <utility>
 #include "opencv2/core/core.hpp"
 #include "opencv2/features2d/features2d.hpp"
 
@@ -195,11 +197,19 @@ namespace FeatureExtraction{
 
 
     namespace perspective_transformation {
+
+        struct transformation_points{
+            cv::Point2f top_left;
+            cv::Point2f bottom_left;
+            cv::Point2f top_right;
+            cv::Point2f bottom_right;
+        };
+
         class IPerspectiveTransformer {
         public:
             virtual ~IPerspectiveTransformer() = default;
-            virtual auto get_perspective_markers(const cv::Mat& mat ) -> cv::Mat;
-            virtual auto get_transformation_points(const cv::Mat& mat ) -> cv::Mat;
+            virtual auto set_perspetive_markers_on_image(const cv::Mat& mat ) -> void = 0;
+            virtual auto get_transformation_points(const cv::Mat& mat ) -> cv::Mat = 0;
         };
 
         namespace util {
@@ -267,10 +277,17 @@ namespace FeatureExtraction{
                                                 .ration = 10,
                                                 .arpeture_size = 3
                                             }) {
-                cv::Mat result;
-                cv::blur(image, result, config.blur_size);
-                cv::Canny(result, result, config.threshold, config.threshold * config.ration, config.arpeture_size);
-                return result;
+                cv::Mat grey;
+                cv::cvtColor(image, grey, cv::COLOR_BGR2GRAY);
+                cv::blur(grey, grey, config.blur_size);
+                cv::Mat edges;
+                cv::Canny(grey, edges,
+                    config.threshold,
+                    config.threshold * config.ration,
+                    config.arpeture_size);
+
+                return edges;
+
             }
 
 
@@ -293,18 +310,18 @@ namespace FeatureExtraction{
                 return  lines;
             }
 
-            auto line_detection(const cv::Mat& image) const -> LinesArray {
+            auto line_detection(const cv::Mat& image)  -> LinesArray {
                 if (images_.size() < max_cache_size_) {
                     images_.push_front(image);
                 } else {
                     images_.pop_back();
                     images_.push_front(image);
                 };
-                std::vector<LinesArray> lines_result;
-                std::ranges::transform(images_, lines_result.begin(),
+                std::vector<LinesArray> lines_result{images_.size()};
+                std::ranges::transform(images_, std::begin(lines_result),
                                        [this](const cv::Mat& image) {
-                                           cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
-                                           return HughTranformConsensus::hugh_transformation(image, this->config_.hugh_line_config);
+                                           const cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
+                                           return HughTranformConsensus::hugh_transformation(result, this->config_.hugh_line_config);
                                        });
 
                 const auto flattened_view = lines_result | std::ranges::views::join;
@@ -368,9 +385,9 @@ namespace FeatureExtraction{
                 return  {
                     CannyEdgeDetectionConfig{
                         .blur_size = cv::Size(2, 2),
-                        .threshold =  2,
-                        .ration = 0.2,
-                        .arpeture_size = 1
+                        .threshold =  3,
+                        .ration = 4,
+                        .arpeture_size = 3
                     },
     ConfigHughlineP{
                         .rho = 2,
@@ -385,15 +402,21 @@ namespace FeatureExtraction{
             }
 
 
-            explicit HughTranformConsensus(std::deque<cv::Mat>& images, int max_cache_size, const LineTransfromConfig& config)
+
+            explicit HughTranformConsensus(const std::deque<cv::Mat>& images, const int  max_cache_size, const LineTransfromConfig& config)
             :images_(images),
             config_(config),
             max_cache_size_(max_cache_size) {
 
             }
 
+            // explicit HughTranformConsensus(HughTranformConsensus& other ) : images_(other.images_) {
+            //     config_ = other.config_;
+            //     max_cache_size_ = other.max_cache_size_;
+            // }
 
-            auto get_vanishing_point(const cv::Mat& image) const -> cv::Point2f {
+
+            auto get_vanishing_point(const cv::Mat& image) -> cv::Point2f {
 
                 auto filter_map = []<typename R, typename T0>(R&& range, T0&& func) {
                     return std::forward<R>(range)
@@ -421,24 +444,59 @@ namespace FeatureExtraction{
 
 
         private:
-            std::deque<cv::Mat>& images_;
-            const LineTransfromConfig config_;
+            std::deque<cv::Mat> images_;
+            LineTransfromConfig config_;
             int max_cache_size_;
 
         };
 
+
+
+
+        inline auto display_vanishing_point_on_image(const cv::Mat& image, const cv::Point2f& vanishing_point) -> void {
+            int radius = 5;
+            auto  color = cv::Scalar(255, 100, 0 );
+            cv::circle(image, vanishing_point, radius, color);
+        }
+
+
+
         class VanishingPointCalibration final: public IPerspectiveTransformer {
-        private:
-            std::stack<cv::Mat> image_cache_;
+
+            std::deque<cv::Mat> image_cache_ {};
             HughTranformConsensus consensus_;
-        public:
+            cv::Mat perspective_marker_image, transform_image;
             struct VanishingPoint {
-                cv::Point2f px;
-                cv::Point2f py;
+                float px;
+                float py;
             };
 
-            explicit VanishingPointCalibration(const HughTranformConsensus& consensus): consensus_(consensus){};
+            auto create_vanishing_point(const cv::Mat& image) -> VanishingPoint {
+                const auto estimated_vanishing_point = consensus_.get_vanishing_point(image);
+                return {
+                    .px =  estimated_vanishing_point.x,
+                    .py =  estimated_vanishing_point.y,
+                };
+            }
 
+        public:
+
+            explicit VanishingPointCalibration(const int max_cache_size, const HughTranformConsensus::LineTransfromConfig& config)
+            : consensus_(image_cache_, max_cache_size, config) {}
+
+            ~VanishingPointCalibration() override {};
+
+            auto set_perspetive_markers_on_image(const cv::Mat &mat) -> void override {
+                const auto vanishing_point = consensus_.get_vanishing_point(mat);
+                display_vanishing_point_on_image(mat, cv::Point2f(vanishing_point.x, vanishing_point.y));
+                // std::cout << "x | " << vanishing_point.x << " |y " << vanishing_point.y << std::endl;
+                cv::copyTo(mat, perspective_marker_image, cv::noArray());
+            }
+
+            auto get_transformation_points(const cv::Mat &mat) -> cv::Mat override {
+                consensus_.get_vanishing_point(mat);
+                return mat;
+            }
 
 
         };
@@ -473,7 +531,7 @@ namespace FeatureExtraction{
             perspective_transform_ = cv::getPerspectiveTransform(points_s1_, points_s2_,cv::DECOMP_QR);
         }
 
-        auto get_perspective_markers(const cv::Mat& mat){
+        auto set_perspective_markers_on_image(const cv::Mat& mat){
             mat.copyTo(perspective_markers_);
             cv::circle(perspective_markers_, points_.top_left, 5, cv::Scalar (255, 100, 0), 3);
             cv::circle(perspective_markers_, points_.bottom_left, 5, cv::Scalar (255, 255, 0), 4);
