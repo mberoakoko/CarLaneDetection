@@ -364,6 +364,25 @@ namespace FeatureExtraction{
                 ConfigLineFilter line_filter_config;
             };
 
+            static auto create_default_config() -> LineTransfromConfig {
+                return  {
+                    CannyEdgeDetectionConfig{
+                        .blur_size = cv::Size(2, 2),
+                        .threshold =  2,
+                        .ration = 0.2,
+                        .arpeture_size = 1
+                    },
+    ConfigHughlineP{
+                        .rho = 2,
+                        .theta = 2,
+                        .threshold = 2,
+                        .mininum_line_length = 2,
+                    },
+                    ConfigLineFilter{
+                        .delta_deg = 0.1,
+                    }
+                };
+            }
 
 
             explicit HughTranformConsensus(std::deque<cv::Mat>& images, int max_cache_size, const LineTransfromConfig& config)
