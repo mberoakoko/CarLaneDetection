@@ -311,20 +311,21 @@ namespace FeatureExtraction{
             }
 
             auto line_detection(const cv::Mat& image)  -> LinesArray {
-                if (images_.size() < max_cache_size_) {
-                    images_.push_front(image);
-                } else {
-                    images_.pop_back();
-                    images_.push_front(image);
+                auto create_lines = [this](const cv::Mat& image) {
+                    const cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
+                    return HughTranformConsensus::hugh_transformation(result, this->config_.hugh_line_config);
                 };
-                std::vector<LinesArray> lines_result{images_.size()};
-                std::ranges::transform(images_, std::begin(lines_result),
-                                       [this](const cv::Mat& image) {
-                                           const cv::Mat result = canny_edge_detector(image, this->config_.canny_config);
-                                           return HughTranformConsensus::hugh_transformation(result, this->config_.hugh_line_config);
-                                       });
 
-                const auto flattened_view = lines_result | std::ranges::views::join;
+                if (lines_.size() < max_cache_size_) {
+                    lines_.push_front(create_lines(image));
+                }else {
+                    lines_.pop_back();
+                    lines_.push_front(create_lines(image));
+                }
+
+                std::vector<LinesArray> lines_result;
+
+                const auto flattened_view = lines_ | std::ranges::views::join;
                 return LinesArray{flattened_view.begin(), flattened_view.end()};
             }
 
@@ -403,9 +404,8 @@ namespace FeatureExtraction{
 
 
 
-            explicit HughTranformConsensus(const std::deque<cv::Mat>& images, const int  max_cache_size, const LineTransfromConfig& config)
-            :images_(images),
-            config_(config),
+            explicit HughTranformConsensus(const int  max_cache_size, const LineTransfromConfig& config)
+            :config_(config),
             max_cache_size_(max_cache_size) {
 
             }
@@ -444,7 +444,7 @@ namespace FeatureExtraction{
 
 
         private:
-            std::deque<cv::Mat> images_;
+            std::deque<LinesArray> lines_;
             LineTransfromConfig config_;
             int max_cache_size_;
 
@@ -482,7 +482,7 @@ namespace FeatureExtraction{
         public:
 
             explicit VanishingPointCalibration(const int max_cache_size, const HughTranformConsensus::LineTransfromConfig& config)
-            : consensus_(image_cache_, max_cache_size, config) {}
+            : consensus_(max_cache_size, config) {}
 
             ~VanishingPointCalibration() override {};
 
