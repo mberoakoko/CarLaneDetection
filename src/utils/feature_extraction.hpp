@@ -301,7 +301,7 @@ namespace FeatureExtraction{
                 const cv::Mat& image,
                 const ConfigHughlineP &config = {
                 .rho = 1.0,
-                .theta = CV_PI/180,
+                .theta = CV_PI/720,
                 .threshold = 80,
                 .mininum_line_length = 10.0,
             }) -> LinesArray{
@@ -347,7 +347,7 @@ namespace FeatureExtraction{
                 const float x1 = line_1[0], y1 = line_1[1], x2 = line_1[2], y2 = line_1[3];
                 const float x3 = line_2[0], y3 = line_2[1], x4 = line_2[2], y4 = line_2[3];
 
-                const float denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+                const double denom = static_cast<double>(x1 - x2) * (y3 - y4) - static_cast<double>(y1 - y2) * (x3 - x4);
 
                 // The "Parallel" Failure Case
                 if (std::abs(denom) < 1e-6f) {
@@ -391,8 +391,8 @@ namespace FeatureExtraction{
                         .arpeture_size = 3
                     },
     ConfigHughlineP{
-                        .rho = 2,
-                        .theta = 2,
+                        .rho =1,
+                        .theta = CV_PI / 720,
                         .threshold = 2,
                         .mininum_line_length = 2,
                     },
@@ -426,7 +426,8 @@ namespace FeatureExtraction{
                 };
 
                 auto pair_to_intersection_result = [](auto && pair) -> IntersectionResultType {
-                    return get_intersection(std::get<0>(pair), std::get<1>(pair));
+                    auto temp_result = get_intersection(std::get<0>(pair), std::get<1>(pair)) ;
+                    return temp_result;
                 };
 
                 LinesArray lines = filter_horizantal_lines(line_detection(image));
@@ -435,7 +436,11 @@ namespace FeatureExtraction{
                     lines | std::views::adjacent<2>, // creates a pair view
                     pair_to_intersection_result);
 
-                std::vector<cv::Point2f> intersections_result{intersections.begin(), intersections.end()};
+                // std::vector<cv::Point2f> intersections_result{intersections.begin(), intersections.end()};
+                std::vector<cv::Point2f> intersections_result;
+                for (const auto item : intersections) {
+                    intersections_result.emplace_back(item);
+                }
                 cv::Point2f vanishing_point = find_vanishing_point(intersections_result);
                 return vanishing_point;
 
@@ -484,12 +489,12 @@ namespace FeatureExtraction{
             explicit VanishingPointCalibration(const int max_cache_size, const HughTranformConsensus::LineTransfromConfig& config)
             : consensus_(max_cache_size, config) {}
 
-            ~VanishingPointCalibration() override {};
+            ~VanishingPointCalibration() override = default;
 
             auto set_perspetive_markers_on_image(const cv::Mat &mat) -> void override {
                 const auto vanishing_point = consensus_.get_vanishing_point(mat);
                 display_vanishing_point_on_image(mat, cv::Point2f(vanishing_point.x, vanishing_point.y));
-                // std::cout << "x | " << vanishing_point.x << " |y " << vanishing_point.y << std::endl;
+                std::cout << "x | " << vanishing_point.x << " |y " << vanishing_point.y << "\n";
                 cv::copyTo(mat, perspective_marker_image, cv::noArray());
             }
 
